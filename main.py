@@ -163,6 +163,50 @@ class KeywordSummaryRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Models specific to Historical Rank Summaries
+# ---------------------------------------------------------------------------
+
+class RankingEntry(BaseModel):
+    """Represents a single ranking entry for a keyword."""
+    
+    url: str
+    Rank: int
+    Type: str
+    Domain: str
+    Keyword: str
+
+
+class RankHistory(BaseModel):
+    """Represents ranking history for mobile and desktop."""
+    
+    mobile: List[RankingEntry]
+    desktop: Optional[List[RankingEntry]] = None
+
+
+class HistoricalKeyword(BaseModel):
+    """Represents a keyword with its historical ranking data."""
+    
+    id: int
+    keyword: str
+    intents: str
+    volume: int
+    position_desktop_change: int
+    position_mobile_change: int
+    rank_history: List[RankHistory]
+
+
+class HistoricalRankRequest(BaseModel):
+    """Request body for historical rank summarisation endpoint."""
+    
+    project_id: int
+    page: int
+    limit: int
+    total_keywords: int
+    keywords: List[HistoricalKeyword]
+    language: Optional[str] = Field("English", description="Target output language")
+
+
+# ---------------------------------------------------------------------------
 # FastAPI Application
 # ---------------------------------------------------------------------------
 
@@ -262,6 +306,53 @@ def _build_keyword_prompt(keyword: Keyword, language: str) -> List[dict[str, str
     ]
 
 
+def _build_historical_rank_prompt(keyword: HistoricalKeyword, language: str) -> List[dict[str, str]]:
+    """Create a Chat prompt for a historical rank summary."""
+    
+    system_prompt: str = (
+        "You are an SEO ranking analyst. Given historical ranking data for a keyword, "
+        "produce a concise summary of ranking patterns, competitive insights, and optimization opportunities. "
+        f"Respond in {language}."
+    )
+    
+    # Create a summary of the top 5 rankings for mobile and desktop
+    mobile_rankings = []
+    desktop_rankings = []
+    
+    if keyword.rank_history and len(keyword.rank_history) > 0:
+        # Get the most recent history entry
+        latest_history = keyword.rank_history[0]
+        
+        # Process mobile rankings
+        if latest_history.mobile:
+            for i, entry in enumerate(latest_history.mobile[:5]):  # Limit to top 5
+                mobile_rankings.append(
+                    f"Rank {entry.Rank}: {entry.url} ({entry.Domain}, {entry.Type})"
+                )
+        
+        # Process desktop rankings if available
+        if latest_history.desktop:
+            for i, entry in enumerate(latest_history.desktop[:5]):  # Limit to top 5
+                desktop_rankings.append(
+                    f"Rank {entry.Rank}: {entry.url} ({entry.Domain}, {entry.Type})"
+                )
+    
+    user_content: str = (
+        f"Keyword: {keyword.keyword}\n"
+        f"Intent: {keyword.intents}\n"
+        f"Volume: {keyword.volume}\n"
+        f"Desktop Position Change: {keyword.position_desktop_change}\n"
+        f"Mobile Position Change: {keyword.position_mobile_change}\n\n"
+        f"Top Mobile Rankings:\n" + "\n".join(mobile_rankings or ["No mobile ranking data available"]) + "\n\n"
+        f"Top Desktop Rankings:\n" + "\n".join(desktop_rankings or ["No desktop ranking data available"])
+    )
+    
+    return [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_content},
+    ]
+
+
 def _summarise_item(item: SEOItem, language: str) -> str:
     """Generate a summary for a single SEO item using Azure OpenAI."""
 
@@ -316,6 +407,24 @@ def _summarise_keyword(keyword: Keyword, language: str) -> str:
     return response.choices[0].message.content.strip()
 
 
+def _summarise_historical_rank(keyword: HistoricalKeyword, language: str) -> str:
+    """Generate a summary for historical rank data via Azure OpenAI."""
+    
+    messages = _build_historical_rank_prompt(keyword, language)
+    
+    try:
+        response = client.chat.completions.create(
+            model=AZURE_OPENAI_DEPLOYMENT,
+            messages=messages,
+            temperature=DEFAULT_TEMPERATURE,
+            max_tokens=MAX_TOKENS,
+        )
+    except Exception as exc:  # pylint: disable=broad-except
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    
+    return response.choices[0].message.content.strip()
+
+
 # Routes --------------------------------------------------------------------
 
 
@@ -354,6 +463,17 @@ async def generate_keyword_summaries(req: KeywordSummaryRequest) -> SummaryRespo
     
     summaries: List[str] = [
         _summarise_keyword(keyword, req.language or "English") for keyword in req.keywords
+    ]
+    
+    return SummaryResponse(summaries=summaries)
+
+
+@app.post("/historical-rank-summaries", response_model=SummaryResponse, summary="Generate historical rank summaries")
+async def generate_historical_rank_summaries(req: HistoricalRankRequest) -> SummaryResponse:  # noqa: D401
+    """Generate summaries for keywords with historical ranking data."""
+    
+    summaries: List[str] = [
+        _summarise_historical_rank(keyword, req.language or "English") for keyword in req.keywords
     ]
     
     return SummaryResponse(summaries=summaries)

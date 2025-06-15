@@ -139,6 +139,65 @@ POST /keyword-summaries
 }
 ```
 
+### Historical Rank Summaries
+
+```json
+POST /historical-rank-summaries
+{
+  "project_id": 25,
+  "page": 1,
+  "limit": 10,
+  "total_keywords": 86,
+  "keywords": [
+    {
+      "id": 1846,
+      "keyword": "body wash",
+      "intents": "Transactional",
+      "volume": 0,
+      "position_desktop_change": 0,
+      "position_mobile_change": 0,
+      "rank_history": [
+        {
+          "mobile": [
+            {
+              "url": "https://www.funworldblr.com/tickets",
+              "Rank": 1,
+              "Type": "My Site",
+              "Domain": "funworldblr.com",
+              "Keyword": "Fun World Bangalore tickets"
+            },
+            {
+              "url": "https://www.funworldblr.com/offers",
+              "Rank": 2,
+              "Type": "My Site",
+              "Domain": "funworldblr.com",
+              "Keyword": "Fun World Bangalore tickets"
+            }
+          ],
+          "desktop": [
+            {
+              "url": "https://www.funworldblr.com/tickets",
+              "Rank": 1,
+              "Type": "My Site",
+              "Domain": "funworldblr.com",
+              "Keyword": "Fun World Bangalore tickets"
+            },
+            {
+              "url": "https://www.funworldblr.com/offers",
+              "Rank": 2,
+              "Type": "My Site",
+              "Domain": "funworldblr.com",
+              "Keyword": "Fun World Bangalore tickets"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "language": "English"
+}
+```
+
 The response will contain a `summaries` array with one summary per input item.
 
 ---
