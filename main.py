@@ -207,6 +207,40 @@ class HistoricalRankRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Models specific to Page Rankings
+# ---------------------------------------------------------------------------
+
+class PageSummary(BaseModel):
+    """Represents a page with its ranking performance data."""
+    
+    page_url: str
+    keyword_count: int
+    avg_current_position: float
+    avg_previous_position: float
+    total_volume: int
+    top_keyword_id: int
+    top_keyword: str
+    top_keyword_desktop_position: int
+    top_keyword_desktop_prev_position: int
+    top_keyword_mobile_position: int
+    top_keyword_mobile_prev_position: int
+    top_keyword_country: str
+
+
+class PageRankingsRequest(BaseModel):
+    """Request body for page rankings summarisation endpoint."""
+    
+    device_type: str
+    project_id: int
+    page: int
+    limit: int
+    total_pages: int
+    total_results: int
+    pages_summary: List[PageSummary]
+    language: Optional[str] = Field("English", description="Target output language")
+
+
+# ---------------------------------------------------------------------------
 # FastAPI Application
 # ---------------------------------------------------------------------------
 
@@ -353,6 +387,39 @@ def _build_historical_rank_prompt(keyword: HistoricalKeyword, language: str) -> 
     ]
 
 
+def _build_page_rankings_prompt(page: PageSummary, device_type: str, language: str) -> List[dict[str, str]]:
+    """Create a Chat prompt for a page rankings summary."""
+    
+    system_prompt: str = (
+        "You are an SEO page analyst. Given ranking data for a specific page, "
+        "produce a concise summary of its performance, keyword rankings, and optimization opportunities. "
+        f"Focus on {device_type} performance. Respond in {language}."
+    )
+    
+    # Calculate position changes
+    avg_position_change = page.avg_previous_position - page.avg_current_position
+    top_keyword_desktop_change = page.top_keyword_desktop_prev_position - page.top_keyword_desktop_position
+    top_keyword_mobile_change = page.top_keyword_mobile_prev_position - page.top_keyword_mobile_position
+    
+    user_content: str = (
+        f"Page URL: {page.page_url}\n"
+        f"Number of Keywords Ranking: {page.keyword_count}\n"
+        f"Average Current Position: {page.avg_current_position}\n"
+        f"Average Previous Position: {page.avg_previous_position}\n"
+        f"Position Change: {avg_position_change}\n"
+        f"Total Search Volume: {page.total_volume}\n\n"
+        f"Top Keyword: {page.top_keyword}\n"
+        f"Top Keyword Desktop Position: {page.top_keyword_desktop_position} (Change: {top_keyword_desktop_change})\n"
+        f"Top Keyword Mobile Position: {page.top_keyword_mobile_position} (Change: {top_keyword_mobile_change})\n"
+        f"Top Keyword Country: {page.top_keyword_country}\n"
+    )
+    
+    return [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_content},
+    ]
+
+
 def _summarise_item(item: SEOItem, language: str) -> str:
     """Generate a summary for a single SEO item using Azure OpenAI."""
 
@@ -425,6 +492,24 @@ def _summarise_historical_rank(keyword: HistoricalKeyword, language: str) -> str
     return response.choices[0].message.content.strip()
 
 
+def _summarise_page_rankings(page: PageSummary, device_type: str, language: str) -> str:
+    """Generate a summary for page rankings data via Azure OpenAI."""
+    
+    messages = _build_page_rankings_prompt(page, device_type, language)
+    
+    try:
+        response = client.chat.completions.create(
+            model=AZURE_OPENAI_DEPLOYMENT,
+            messages=messages,
+            temperature=DEFAULT_TEMPERATURE,
+            max_tokens=MAX_TOKENS,
+        )
+    except Exception as exc:  # pylint: disable=broad-except
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    
+    return response.choices[0].message.content.strip()
+
+
 # Routes --------------------------------------------------------------------
 
 
@@ -474,6 +559,17 @@ async def generate_historical_rank_summaries(req: HistoricalRankRequest) -> Summ
     
     summaries: List[str] = [
         _summarise_historical_rank(keyword, req.language or "English") for keyword in req.keywords
+    ]
+    
+    return SummaryResponse(summaries=summaries)
+
+
+@app.post("/page-rankings-summaries", response_model=SummaryResponse, summary="Generate page rankings summaries")
+async def generate_page_rankings_summaries(req: PageRankingsRequest) -> SummaryResponse:  # noqa: D401
+    """Generate summaries for pages with their keyword ranking performance."""
+    
+    summaries: List[str] = [
+        _summarise_page_rankings(page, req.device_type, req.language or "English") for page in req.pages_summary
     ]
     
     return SummaryResponse(summaries=summaries)

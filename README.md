@@ -198,6 +198,51 @@ POST /historical-rank-summaries
 }
 ```
 
+### Page Rankings Summaries
+
+```json
+POST /page-rankings-summaries
+{
+  "device_type": "desktop",
+  "project_id": 25,
+  "page": 1,
+  "limit": 10,
+  "total_pages": 15,
+  "total_results": 6,
+  "pages_summary": [
+    {
+      "page_url": "https://www.funworldblr.com/rides&attractions",
+      "keyword_count": 1,
+      "avg_current_position": 1,
+      "avg_previous_position": 1,
+      "total_volume": 0,
+      "top_keyword_id": 1849,
+      "top_keyword": "Fun World Bangalore rides list",
+      "top_keyword_desktop_position": 1,
+      "top_keyword_desktop_prev_position": 1,
+      "top_keyword_mobile_position": 1,
+      "top_keyword_mobile_prev_position": 1,
+      "top_keyword_country": "India"
+    },
+    {
+      "page_url": "https://www.funworldblr.com/kidsrides",
+      "keyword_count": 1,
+      "avg_current_position": 1,
+      "avg_previous_position": 1,
+      "total_volume": 0,
+      "top_keyword_id": 2146,
+      "top_keyword": "kids rides Bangalore",
+      "top_keyword_desktop_position": 1,
+      "top_keyword_desktop_prev_position": 1,
+      "top_keyword_mobile_position": 1,
+      "top_keyword_mobile_prev_position": 1,
+      "top_keyword_country": "India"
+    }
+  ],
+  "language": "English"
+}
+```
+
 The response will contain a `summaries` array with one summary per input item.
 
 ---
